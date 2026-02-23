@@ -198,8 +198,8 @@ export function ComponentMesh({ component, selected, onClick, onPinClick, showPi
   const rotY = rotation === 1 ? Math.PI / 2 : 0;
 
   // Pin world positions (in local space, then rotated)
-  const pin0Local: [number,number,number] = [0.9, 0, 0];
-  const pin1Local: [number,number,number] = [-0.9, 0, 0];
+  const pin0Local: [number,number,number] = [-0.9, 0, 0];
+  const pin1Local: [number,number,number] = [0.9, 0, 0];
 
   return (
     <group
