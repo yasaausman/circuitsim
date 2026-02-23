@@ -138,6 +138,44 @@ function CurrentSourceBody() {
   );
 }
 
+function BulbBody({ value, componentId }: { value: number; componentId: string }) {
+  const getBranchCurrent = useSimStore((s) => s.getBranchCurrent);
+  const current = getBranchCurrent(componentId);
+  const intensity = current !== null ? Math.min(1, Math.abs(current) * 15) : 0; // scale |I| to glow
+  return (
+    <group>
+      {/* Glass envelope */}
+      <mesh>
+        <sphereGeometry args={[0.4, 24, 24]} />
+        <meshStandardMaterial
+          color="#f0f0e8"
+          transparent
+          opacity={0.75}
+          roughness={0.1}
+          metalness={0}
+        />
+      </mesh>
+      {/* Filament (coil inside) */}
+      <mesh position={[0, 0, 0]}>
+        <cylinderGeometry args={[0.08, 0.08, 0.5, 8]} />
+        <meshStandardMaterial
+          color="#ffcc66"
+          emissive="#ffaa22"
+          emissiveIntensity={intensity}
+          roughness={0.8}
+        />
+      </mesh>
+      {/* Base / cap */}
+      <mesh position={[0, -0.38, 0]}>
+        <cylinderGeometry args={[0.32, 0.35, 0.12, 16]} />
+        <meshStandardMaterial color="#2a2a2a" roughness={0.8} />
+      </mesh>
+      <Lead from={[-0.9, 0, 0]} to={[-0.35, 0, 0]} />
+      <Lead from={[0.35, 0, 0]} to={[0.9, 0, 0]} />
+    </group>
+  );
+}
+
 function GroundBody() {
   return (
     <group>
@@ -213,6 +251,7 @@ export function ComponentMesh({ component, selected, onClick, onPinClick, showPi
       {type === "inductor" && <InductorBody />}
       {type === "voltage_source" && <VoltageSourceBody value={value} />}
       {type === "current_source" && <CurrentSourceBody />}
+      {type === "bulb" && <BulbBody value={value} componentId={component.id} />}
       {type === "ground" && <GroundBody />}
 
       {/* Selection ring */}

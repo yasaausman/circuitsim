@@ -6,7 +6,8 @@ export type ComponentType =
   | "inductor"
   | "voltage_source"
   | "current_source"
-  | "ground";
+  | "ground"
+  | "bulb";
 
 export interface Vec3 {
   x: number;
@@ -22,7 +23,7 @@ export interface Vec3 {
 export interface Component {
   id: string;
   type: ComponentType;
-  /** Value in SI units: Ω, F, H, V, or A */
+  /** Value in SI units: Ω, F, H, V, A; for bulb: filament resistance in Ω */
   value: number;
   label?: string;
   position: Vec3;

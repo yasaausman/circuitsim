@@ -7,6 +7,7 @@ const COMPONENTS: { type: ComponentType; label: string; symbol: string; unit: st
   { type: "inductor",       label: "Inductor",        symbol: "L",  unit: "H" },
   { type: "voltage_source", label: "Voltage Source",  symbol: "V",  unit: "V" },
   { type: "current_source", label: "Current Source",  symbol: "I",  unit: "A" },
+  { type: "bulb",           label: "Bulb",            symbol: "💡", unit: "Ω" },
   { type: "ground",         label: "Ground",          symbol: "⏚", unit: "" },
 ];
 

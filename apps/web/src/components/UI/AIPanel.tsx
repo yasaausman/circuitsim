@@ -45,6 +45,7 @@ function autoLabel(type: ComponentType, components: Component[]): string {
     inductor: "L",
     voltage_source: "V",
     current_source: "I",
+    bulb: "B",
     ground: "GND",
   };
 

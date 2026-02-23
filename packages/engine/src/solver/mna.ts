@@ -107,7 +107,8 @@ export function solveMNA(
     const nN = nodeOfPin(netlist, c.id, 1); // negative / pin 1
 
     switch (c.type) {
-      case "resistor": {
+      case "resistor":
+      case "bulb": {
         if (c.value === 0) break; // ideal short
         stampG(nP, nN, 1 / c.value);
         break;
@@ -181,6 +182,7 @@ export function solveMNA(
 
     switch (c.type) {
       case "resistor":
+      case "bulb":
         branchCurrents.set(c.id, c.value !== 0 ? (vP - vN) / c.value : 0);
         break;
       case "voltage_source": {

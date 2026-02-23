@@ -73,6 +73,7 @@ function Scene() {
         inductor: 1e-3,
         voltage_source: 5,
         current_source: 0.01,
+        bulb: 100,
         ground: 0,
       };
       addComponent(

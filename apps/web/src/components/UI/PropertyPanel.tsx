@@ -9,6 +9,7 @@ const UNITS: Record<string, string> = {
   inductor: "H",
   voltage_source: "V",
   current_source: "A",
+  bulb: "Ω",
   ground: "",
 };
 

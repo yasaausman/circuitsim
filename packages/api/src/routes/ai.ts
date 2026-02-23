@@ -36,7 +36,7 @@ const CIRCUIT_TOOLS: FunctionDeclaration[] = [
       properties: {
         type: {
           type: SchemaType.STRING,
-          enum: ["resistor", "capacitor", "inductor", "voltage_source", "current_source", "ground"],
+          enum: ["resistor", "capacitor", "inductor", "voltage_source", "current_source", "bulb", "ground"],
           description: "Component type",
         },
         value: { type: SchemaType.NUMBER, description: "SI value: Ω, F, H, V, or A" },
