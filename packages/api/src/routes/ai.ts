@@ -30,7 +30,7 @@ export const aiRoutes = new Hono();
 const CIRCUIT_TOOLS: FunctionDeclaration[] = [
   {
     name: "add_component",
-    description: "Add a circuit component at a grid position.",
+    description: "Add a circuit component at a grid position. Prefer setting a readable label like R1, V1, GND.",
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
@@ -50,7 +50,7 @@ const CIRCUIT_TOOLS: FunctionDeclaration[] = [
   },
   {
     name: "connect",
-    description: "Connect two component pins with a wire.",
+    description: "Connect two component pins with a wire, usually by component IDs returned from tools.",
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
@@ -60,6 +60,42 @@ const CIRCUIT_TOOLS: FunctionDeclaration[] = [
         toPinIndex: { type: SchemaType.NUMBER, description: "0 or 1" },
       },
       required: ["fromComponentId", "fromPinIndex", "toComponentId", "toPinIndex"],
+    },
+  },
+  {
+    name: "connect_by_label",
+    description: "Connect two components by label (preferred). Use terminal names like left/right/top/bottom/positive/negative/pin0/pin1.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        fromLabel: { type: SchemaType.STRING, description: "Source component label, e.g. V1" },
+        fromTerminal: {
+          type: SchemaType.STRING,
+          description: "Optional terminal selector: pin0, pin1, left, right, top, bottom, positive, negative, plus, minus",
+        },
+        toLabel: { type: SchemaType.STRING, description: "Destination component label, e.g. R1" },
+        toTerminal: {
+          type: SchemaType.STRING,
+          description: "Optional terminal selector: pin0, pin1, left, right, top, bottom, positive, negative, plus, minus",
+        },
+      },
+      required: ["fromLabel", "toLabel"],
+    },
+  },
+  {
+    name: "update_component",
+    description: "Update a component by ID or label. Useful to fix values, labels, rotation, or placement.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        id: { type: SchemaType.STRING, description: "Component ID (optional if label is provided)" },
+        label: { type: SchemaType.STRING, description: "Component label used as identifier when id is not provided" },
+        value: { type: SchemaType.NUMBER, description: "New SI value: Ω, F, H, V, or A" },
+        newLabel: { type: SchemaType.STRING, description: "New display label" },
+        x: { type: SchemaType.NUMBER, description: "New X position" },
+        z: { type: SchemaType.NUMBER, description: "New Z position" },
+        rotation: { type: SchemaType.NUMBER, description: "0 = horizontal, 1 = vertical" },
+      },
     },
   },
   {
@@ -103,14 +139,16 @@ const TOOLS: Tool[] = [{ functionDeclarations: CIRCUIT_TOOLS }];
 const SYSTEM_PROMPT = `You are CircuitSim AI — an expert electronics engineer assistant embedded in a 3D circuit simulator.
 
 You can build, modify, and analyse circuits using the provided tools.
-Component grid coordinates: place components on a 2D XZ grid (integer coords).
-Typical spacing: 3 units between components. Keep circuits tidy.
+Important: there is no "cable component". Wires are created only with connect/connect_by_label tools.
+Component grid coordinates: place components on a 2D XZ grid (integer coords, snapped in app).
+Typical spacing: 2 to 4 units between components. Keep circuits tidy.
 
 When building circuits:
-1. Place components first (add_component), noting their IDs from the response
-2. Connect them with wires (connect)
+1. Place components first (add_component), and assign clear labels (V1, R1, R2, GND, etc.)
+2. Connect them with wires (prefer connect_by_label)
 3. Always include at least one ground component
 4. Run simulation to verify
+5. If a tool fails, call get_circuit and then repair using update_component / reconnect
 
 Respond concisely. When calling tools, explain briefly what you're doing.`;
 
@@ -127,6 +165,56 @@ interface ToolCall {
   id: string;
   name: string;
   args: Record<string, unknown>;
+}
+
+function circuitSummaryText(circuit: unknown): string {
+  const c = circuit as {
+    components?: Array<{
+      id?: string;
+      label?: string;
+      type?: string;
+      value?: number;
+      rotation?: 0 | 1;
+      position?: { x?: number; z?: number };
+    }>;
+    wires?: Array<{
+      id?: string;
+      fromComponentId?: string;
+      fromPinIndex?: 0 | 1;
+      toComponentId?: string;
+      toPinIndex?: 0 | 1;
+    }>;
+  };
+
+  const comps = Array.isArray(c?.components) ? c.components : [];
+  const wires = Array.isArray(c?.wires) ? c.wires : [];
+  const byId = new Map(comps.map((x) => [x.id ?? "", x]));
+
+  const compLines = comps.map((x, i) => {
+    const id = x.id ?? `unknown_${i}`;
+    const label = x.label ?? "(no-label)";
+    const type = x.type ?? "unknown";
+    const value = typeof x.value === "number" ? x.value : "n/a";
+    const rot = x.rotation === 1 ? "vertical" : "horizontal";
+    const pos = `x=${x.position?.x ?? "?"}, z=${x.position?.z ?? "?"}`;
+    const terms = x.type === "ground" ? "gnd(pin0)" : (x.rotation === 1 ? "top(pin0), bottom(pin1)" : "left(pin0), right(pin1)");
+    return `- ${label} [${id}] type=${type} value=${value} ${rot} ${pos} terminals=${terms}`;
+  });
+
+  const wireLines = wires.map((w, i) => {
+    const from = byId.get(w.fromComponentId ?? "");
+    const to = byId.get(w.toComponentId ?? "");
+    const fromLabel = from?.label ?? w.fromComponentId ?? `from_${i}`;
+    const toLabel = to?.label ?? w.toComponentId ?? `to_${i}`;
+    return `- ${fromLabel}.pin${w.fromPinIndex ?? "?"} -> ${toLabel}.pin${w.toPinIndex ?? "?"}`;
+  });
+
+  return [
+    `Components (${compLines.length})`,
+    ...(compLines.length ? compLines : ["- none"]),
+    `Wires (${wireLines.length})`,
+    ...(wireLines.length ? wireLines : ["- none"]),
+  ].join("\n");
 }
 
 // ─── Route ────────────────────────────────────────────────────────────────────
@@ -162,8 +250,16 @@ aiRoutes.post("/chat", async (c) => {
 
   const lastMessage = messages[messages.length - 1];
 
-  // Inject current circuit state as context
-  const userText = `Current circuit state:\n${JSON.stringify(circuit, null, 2)}\n\n---\n\n${lastMessage.content}`;
+  // Inject current circuit state as context in both machine and readable forms
+  const userText = `Current circuit summary:
+${circuitSummaryText(circuit)}
+
+Current circuit JSON:
+${JSON.stringify(circuit, null, 2)}
+
+---
+
+${lastMessage.content}`;
 
   try {
     const chat = model.startChat({ history });
