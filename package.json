@@ -1,0 +1,14 @@
+{
+  "name": "circuitsim",
+  "version": "0.0.1",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "concurrently -n api,web -c green,cyan --kill-others-on-fail \"npm --prefix packages/api run dev\" \"npm --prefix apps/web run dev\"",
+    "build": "npm --prefix packages/engine run build && npm --prefix packages/api run build && npm --prefix apps/web run build",
+    "typecheck": "npm --prefix packages/engine run typecheck && npm --prefix packages/api run typecheck && npm --prefix apps/web run typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
