@@ -99,7 +99,6 @@ export function AIPanel() {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem("gemini_api_key") ?? "");
   const [showSettings, setShowSettings] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const circuit = useCircuitStore((s) => s.circuit);
   const executeTools = useToolExecutor();
 
   useEffect(() => {
@@ -120,46 +119,81 @@ export function AIPanel() {
     setLoading(true);
 
     try {
-      // Gemini only accepts "user" | "model" roles — map correctly
-      const history = newMessages
-        .filter((m) => m.role !== "system") // system prompt is handled server-side
+      let uiMessages = [...newMessages];
+      let agentHistory: Array<{ role: "user" | "assistant"; content: string }> = newMessages
+        .filter((m) => m.role !== "system")
         .map((m) => ({
           role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
           content: m.content,
         }));
 
-      const res = await fetch("/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: history,
-          circuit,
-          ...(apiKey ? { apiKey } : {}),
-        }),
-      });
+      const MAX_AGENT_STEPS = 8;
+      for (let step = 0; step < MAX_AGENT_STEPS; step++) {
+        const res = await fetch("/api/ai/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: agentHistory,
+            circuit: useCircuitStore.getState().circuit,
+            ...(apiKey ? { apiKey } : {}),
+          }),
+        });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error ?? "API error");
-      }
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error ?? "API error");
+        }
 
-      const { reply, toolCalls }: { reply: string; toolCalls: ToolCall[] } = await res.json();
+        const { reply, toolCalls }: { reply: string; toolCalls: ToolCall[] } = await res.json();
 
-      // Execute tool calls
-      let toolLog = "";
-      if (toolCalls?.length > 0) {
-        for (const tc of toolCalls) {
-          const result = await executeTools(tc);
-          toolLog += `\n⚡ \`${tc.name}\` → ${result}`;
+        let toolLog = "";
+        const toolResults: Array<{ name: string; result: string }> = [];
+        if (toolCalls?.length > 0) {
+          for (const tc of toolCalls) {
+            const result = await executeTools(tc);
+            toolResults.push({ name: tc.name, result });
+            toolLog += `\n⚡ \`${tc.name}\` → ${result}`;
+          }
+        }
+
+        const assistantMsg: Message = {
+          role: "assistant",
+          content: reply + (toolLog ? "\n\n" + toolLog : ""),
+          toolCalls,
+        };
+        uiMessages = [...uiMessages, assistantMsg];
+        setMessages(uiMessages);
+
+        agentHistory = [
+          ...agentHistory,
+          { role: "assistant", content: reply },
+        ];
+
+        if (!toolCalls?.length) break;
+
+        const toolResultPayload = toolResults
+          .map((t) => `${t.name}: ${t.result}`)
+          .join("\n");
+
+        agentHistory = [
+          ...agentHistory,
+          {
+            role: "user",
+            content: `Tool results:\n${toolResultPayload}\n\nContinue until the task is complete. If complete, respond normally without calling tools.`,
+          },
+        ];
+
+        if (step === MAX_AGENT_STEPS - 1) {
+          uiMessages = [
+            ...uiMessages,
+            {
+              role: "assistant",
+              content: "Reached agent step limit before completion. Ask me to continue and I will keep going from the current state.",
+            },
+          ];
+          setMessages(uiMessages);
         }
       }
-
-      const assistantMsg: Message = {
-        role: "assistant",
-        content: reply + (toolLog ? "\n\n" + toolLog : ""),
-        toolCalls,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
     } catch (e) {
       setMessages((prev) => [
         ...prev,

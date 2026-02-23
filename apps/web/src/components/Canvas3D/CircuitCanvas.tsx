@@ -109,6 +109,7 @@ function Scene() {
 
   return (
     <>
+      <color attach="background" args={["#ffffff"]} />
       <ambientLight intensity={0.4} />
       <directionalLight position={[10, 20, 10]} intensity={0.8} castShadow />
       <pointLight position={[-10, 10, -10]} intensity={0.3} color="#00ff9d" />
@@ -159,7 +160,7 @@ export function CircuitCanvas() {
       camera={{ position: [0, 14, 14], fov: 45, near: 0.1, far: 500 }}
       shadows
       gl={{ antialias: true, alpha: false }}
-      style={{ background: "#0a0f0a" }}
+      style={{ background: "#ffffff" }}
     >
       <Scene />
     </Canvas>
