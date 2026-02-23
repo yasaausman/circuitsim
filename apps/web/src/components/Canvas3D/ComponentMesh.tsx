@@ -278,6 +278,18 @@ export function ComponentMesh({ component, selected, onClick, onPinClick, showPi
           </mesh>
         </>
       )}
+      {showPins && type === "ground" && (
+        <>
+          <PinIndicator position={[0, 0.9, 0]} active={showPins} />
+          <mesh
+            position={[0, 0.9, 0]}
+            onClick={(e) => { e.stopPropagation(); onPinClick(0); }}
+          >
+            <sphereGeometry args={[0.18, 8, 8]} />
+            <meshStandardMaterial transparent opacity={0} />
+          </mesh>
+        </>
+      )}
 
       {/* Label */}
       {label && (
