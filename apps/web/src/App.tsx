@@ -1,91 +1,100 @@
-import { useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { Bot, ChevronLeft, ChevronRight } from "lucide-react";
+import { decodeCircuitFromUrl, encodeCircuitToUrl } from "./lib/circuit-tools";
 import { CircuitCanvas } from "./components/Canvas3D/CircuitCanvas";
 import { Toolbar } from "./components/UI/Toolbar";
 import { ComponentPalette } from "./components/UI/ComponentPalette";
 import { SimControls } from "./components/UI/SimControls";
 import { PropertyPanel } from "./components/UI/PropertyPanel";
-import { AIPanel } from "./components/UI/AIPanel";
+import { useCircuitStore } from "./store/circuit";
+
+const AIPanel = lazy(() => import("./components/UI/AIPanel").then((module) => ({ default: module.AIPanel })));
 
 export default function App() {
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [activeRightTab, setActiveRightTab] = useState<"props" | "ai">("props");
+  const circuit = useCircuitStore((state) => state.circuit);
+  const loadCircuit = useCircuitStore((state) => state.loadCircuit);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const encoded = params.get("c");
+    if (!encoded) return;
+    const decoded = decodeCircuitFromUrl(encoded);
+    if (decoded) {
+      loadCircuit(decoded);
+    }
+  }, [loadCircuit]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("c", encodeCircuitToUrl(circuit));
+    window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
+  }, [circuit]);
 
   return (
-    <div className="flex flex-col w-full h-full bg-surface text-gray-100">
-      {/* Toolbar */}
+    <div className="flex h-full w-full min-h-0 flex-col bg-slate-100 text-slate-900">
       <Toolbar />
 
-      {/* Main area */}
-      <div className="flex flex-1 overflow-hidden">
-
-        {/* ── Left panel ── */}
-        <div
-          className={`flex-shrink-0 bg-surface-raised border-r border-surface-border flex flex-col transition-all duration-200 ${
-            leftOpen ? "w-48" : "w-0 overflow-hidden"
-          }`}
-        >
-          <ComponentPalette />
-          <div className="border-t border-surface-border" />
-          <SimControls />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className={`flex min-h-0 flex-shrink-0 flex-col border-r border-slate-200 bg-slate-50 transition-all duration-200 ${leftOpen ? "w-72" : "w-0 overflow-hidden"}`}>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <ComponentPalette />
+            <div className="border-t border-slate-200" />
+            <SimControls />
+          </div>
         </div>
 
-        {/* Left toggle */}
         <button
-          onClick={() => setLeftOpen((v) => !v)}
-          className="w-3 bg-surface-raised border-r border-surface-border flex items-center justify-center text-gray-600 hover:text-gray-300 hover:bg-surface-border transition-all z-10 flex-shrink-0"
+          onClick={() => setLeftOpen((value) => !value)}
+          className="z-10 flex w-4 flex-shrink-0 items-center justify-center border-r border-slate-200 bg-white text-slate-400 transition hover:bg-slate-50 hover:text-slate-700"
         >
-          {leftOpen ? <ChevronLeft size={10} /> : <ChevronRight size={10} />}
+          {leftOpen ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
         </button>
 
-        {/* ── 3D Canvas ── */}
-        <div className="flex-1 relative overflow-hidden">
+        <div className="relative min-h-0 flex-1 overflow-hidden bg-white">
           <CircuitCanvas />
-
-          {/* Status bar overlay */}
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-2 pointer-events-none">
-            <div className="bg-surface-raised/80 backdrop-blur border border-surface-border rounded px-2 py-1 text-[10px] text-gray-500 font-mono">
-              Orbit: drag · Pan: right-drag · Zoom: scroll
+          <div className="pointer-events-none absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-2">
+            <div className="rounded-full border border-slate-200 bg-white/85 px-3 py-1 text-[10px] text-slate-600 shadow-sm backdrop-blur">
+              Orbit: drag · Pan: right-drag · Zoom: scroll · Wires snap to grid
             </div>
           </div>
         </div>
 
-        {/* Right toggle */}
         <button
-          onClick={() => setRightOpen((v) => !v)}
-          className="w-3 bg-surface-raised border-l border-surface-border flex items-center justify-center text-gray-600 hover:text-gray-300 hover:bg-surface-border transition-all z-10 flex-shrink-0"
+          onClick={() => setRightOpen((value) => !value)}
+          className="z-10 flex w-4 flex-shrink-0 items-center justify-center border-l border-slate-200 bg-white text-slate-400 transition hover:bg-slate-50 hover:text-slate-700"
         >
-          {rightOpen ? <ChevronRight size={10} /> : <ChevronLeft size={10} />}
+          {rightOpen ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
         </button>
 
-        {/* ── Right panel ── */}
-        <div
-          className={`flex-shrink-0 bg-surface-raised border-l border-surface-border flex flex-col transition-all duration-200 ${
-            rightOpen ? "w-56" : "w-0 overflow-hidden"
-          }`}
-        >
-          {/* Tab bar */}
-          <div className="flex border-b border-surface-border">
+        <div className={`flex min-h-0 flex-shrink-0 flex-col border-l border-slate-200 bg-slate-50 transition-all duration-200 ${rightOpen ? "w-80" : "w-0 overflow-hidden"}`}>
+          <div className="flex border-b border-slate-200">
             {(["props", "ai"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveRightTab(tab)}
-                className={`flex-1 flex items-center justify-center gap-1 py-2 text-[11px] transition-all ${
+                className={`flex flex-1 items-center justify-center gap-1 py-3 text-xs font-medium transition ${
                   activeRightTab === tab
-                    ? "text-accent-green border-b-2 border-accent-green"
-                    : "text-gray-500 hover:text-gray-300"
+                    ? "border-b-2 border-emerald-500 text-emerald-700"
+                    : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                {tab === "ai" && <Bot size={11} />}
+                {tab === "ai" && <Bot size={12} />}
                 {tab === "props" ? "Properties" : "AI"}
               </button>
             ))}
           </div>
 
-          {/* Panel content */}
-          <div className="flex-1 overflow-hidden flex flex-col">
-            {activeRightTab === "props" ? <PropertyPanel /> : <AIPanel />}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {activeRightTab === "props" ? (
+              <PropertyPanel />
+            ) : (
+              <Suspense fallback={<div className="p-4 text-sm text-slate-500">Loading AI panel...</div>}>
+                <AIPanel />
+              </Suspense>
+            )}
           </div>
         </div>
       </div>

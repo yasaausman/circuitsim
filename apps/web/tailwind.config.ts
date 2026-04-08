@@ -6,15 +6,15 @@ export default {
     extend: {
       colors: {
         surface: {
-          DEFAULT: "#0d0d14",
-          raised: "#13131e",
-          border: "#1e1e2e",
+          DEFAULT: "#f8fafc",
+          raised: "#ffffff",
+          border: "#e2e8f0",
         },
         accent: {
-          green: "#00ff9d",
-          blue: "#4f8ef7",
-          amber: "#f7b731",
-          red: "#ff4757",
+          green: "#10b981",
+          blue: "#0284c7",
+          amber: "#f59e0b",
+          red: "#ef4444",
         },
       },
       fontFamily: {

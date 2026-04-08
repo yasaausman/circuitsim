@@ -1,119 +1,72 @@
-/**
- * 3D meshes for each circuit component type.
- * Pin 0 is always at the "start" end, pin 1 at the "end" end.
- * Horizontal: pin0 at -X, pin1 at +X
- * Vertical:   pin0 at -Z, pin1 at +Z
- */
-
-import { useMemo } from "react";
 import { Html, Line } from "@react-three/drei";
-import * as THREE from "three";
 import type { Component } from "@circuitsim/engine";
 import { useSimStore } from "../../store/simulation";
 
-// ─── Voltage → color mapping ──────────────────────────────────────────────────
-
-function voltageColor(v: number | null): string {
-  if (v === null) return "#888";
-  const clamped = Math.max(-12, Math.min(12, v));
-  const t = (clamped + 12) / 24; // 0..1
-  const r = Math.round(t * 255);
-  const b = Math.round((1 - t) * 255);
-  return `rgb(${r},64,${b})`;
+function formatPowerLabel(value: number | null) {
+  if (value === null) return null;
+  const magnitude = Math.abs(value);
+  if (magnitude >= 1) return `${value.toFixed(3)}W`;
+  if (magnitude >= 1e-3) return `${(value * 1e3).toFixed(2)}mW`;
+  if (magnitude >= 1e-6) return `${(value * 1e6).toFixed(2)}uW`;
+  return `${(value * 1e9).toFixed(2)}nW`;
 }
 
-// ─── Lead wire helper ─────────────────────────────────────────────────────────
-
-function Lead({ from, to }: { from: [number,number,number]; to: [number,number,number] }) {
-  return (
-    <Line points={[from, to]} color="#b87333" lineWidth={2} />
-  );
+function Lead({ from, to }: { from: [number, number, number]; to: [number, number, number] }) {
+  return <Line points={[from, to]} color="#64748b" lineWidth={2} />;
 }
 
-// ─── Component meshes ─────────────────────────────────────────────────────────
-
-function ResistorBody({ value }: { value: number }) {
+function ResistorBody() {
   return (
     <group>
       <mesh>
         <boxGeometry args={[1.2, 0.28, 0.28]} />
-        <meshStandardMaterial color="#d4a84b" roughness={0.6} />
+        <meshStandardMaterial color="#f59e0b" roughness={0.65} />
       </mesh>
-      {/* Bands */}
-      {[-0.3, 0, 0.3].map((x, i) => (
-        <mesh key={i} position={[x, 0, 0]}>
-          <boxGeometry args={[0.1, 0.32, 0.32]} />
-          <meshStandardMaterial color={["#1a1a1a","#c00","#f80"][i]} />
-        </mesh>
-      ))}
       <Lead from={[-0.9, 0, 0]} to={[-0.6, 0, 0]} />
       <Lead from={[0.6, 0, 0]} to={[0.9, 0, 0]} />
     </group>
   );
 }
 
-function CapacitorBody({ value }: { value: number }) {
+function CapacitorBody() {
   return (
     <group>
-      <mesh>
-        <cylinderGeometry args={[0.22, 0.22, 0.8, 16]} />
-        <meshStandardMaterial color="#2255aa" roughness={0.4} metalness={0.3} />
+      <mesh position={[-0.12, 0, 0]}>
+        <boxGeometry args={[0.04, 0.6, 0.4]} />
+        <meshStandardMaterial color="#1d4ed8" />
       </mesh>
-      {/* Polarity stripe */}
-      <mesh position={[0, 0.35, 0]}>
-        <cylinderGeometry args={[0.225, 0.225, 0.1, 16]} />
-        <meshStandardMaterial color="#888" />
+      <mesh position={[0.12, 0, 0]}>
+        <boxGeometry args={[0.04, 0.6, 0.4]} />
+        <meshStandardMaterial color="#1d4ed8" />
       </mesh>
-      <Lead from={[-0.9, 0, 0]} to={[-0.01, 0, 0]} />
-      <Lead from={[0.01, 0, 0]} to={[0.9, 0, 0]} />
+      <Lead from={[-0.9, 0, 0]} to={[-0.12, 0, 0]} />
+      <Lead from={[0.12, 0, 0]} to={[0.9, 0, 0]} />
     </group>
   );
 }
 
 function InductorBody() {
-  const coils = 5;
-  const coilPoints = useMemo(() => {
-    const pts: THREE.Vector3[] = [];
-    for (let i = 0; i <= coils * 32; i++) {
-      const t = i / (coils * 32);
-      const angle = t * coils * Math.PI * 2;
-      pts.push(new THREE.Vector3(
-        (t - 0.5) * 1.4,
-        Math.sin(angle) * 0.15,
-        Math.cos(angle) * 0.15
-      ));
-    }
-    return pts;
-  }, []);
-
   return (
     <group>
-      <Line points={coilPoints} color="#c0a000" lineWidth={3} />
-      <Lead from={[-0.9, 0, 0]} to={[-0.7, 0, 0]} />
-      <Lead from={[0.7, 0, 0]} to={[0.9, 0, 0]} />
+      {[-0.36, -0.12, 0.12, 0.36].map((x) => (
+        <mesh key={x} position={[x, 0, 0]}>
+          <torusGeometry args={[0.14, 0.04, 8, 16]} />
+          <meshStandardMaterial color="#7c3aed" />
+        </mesh>
+      ))}
+      <Lead from={[-0.9, 0, 0]} to={[-0.52, 0, 0]} />
+      <Lead from={[0.52, 0, 0]} to={[0.9, 0, 0]} />
     </group>
   );
 }
 
-function VoltageSourceBody({ value }: { value: number }) {
+function VoltageSourceBody() {
   return (
     <group>
       <mesh>
-        <cylinderGeometry args={[0.35, 0.35, 0.8, 24]} />
-        <meshStandardMaterial color="#1a3a1a" roughness={0.5} />
+        <cylinderGeometry args={[0.35, 0.35, 0.3, 24]} />
+        <meshStandardMaterial color="#16a34a" roughness={0.35} />
       </mesh>
-      {/* Outer ring */}
-      <mesh>
-        <torusGeometry args={[0.35, 0.03, 8, 24]} />
-        <meshStandardMaterial color="#00ff9d" emissive="#00ff9d" emissiveIntensity={0.6} />
-      </mesh>
-      {/* + and - labels */}
-      <Html position={[0, 0.55, 0]} center style={{ fontSize: 10, color: "#00ff9d", pointerEvents: "none" }}>
-        <span>+</span>
-      </Html>
-      <Html position={[0, -0.55, 0]} center style={{ fontSize: 10, color: "#ff4757", pointerEvents: "none" }}>
-        <span>−</span>
-      </Html>
       <Lead from={[-0.9, 0, 0]} to={[-0.35, 0, 0]} />
       <Lead from={[0.35, 0, 0]} to={[0.9, 0, 0]} />
     </group>
@@ -125,12 +78,11 @@ function CurrentSourceBody() {
     <group>
       <mesh>
         <torusGeometry args={[0.35, 0.04, 8, 24]} />
-        <meshStandardMaterial color="#4f8ef7" emissive="#4f8ef7" emissiveIntensity={0.3} />
+        <meshStandardMaterial color="#0284c7" />
       </mesh>
-      {/* Arrow */}
       <mesh rotation={[0, 0, Math.PI / 2]}>
-        <coneGeometry args={[0.12, 0.3, 8]} />
-        <meshStandardMaterial color="#4f8ef7" emissive="#4f8ef7" emissiveIntensity={0.4} />
+        <coneGeometry args={[0.12, 0.25, 10]} />
+        <meshStandardMaterial color="#0284c7" />
       </mesh>
       <Lead from={[-0.9, 0, 0]} to={[-0.35, 0, 0]} />
       <Lead from={[0.35, 0, 0]} to={[0.9, 0, 0]} />
@@ -138,37 +90,40 @@ function CurrentSourceBody() {
   );
 }
 
-function BulbBody({ value, componentId }: { value: number; componentId: string }) {
-  const getBranchCurrent = useSimStore((s) => s.getBranchCurrent);
-  const current = getBranchCurrent(componentId);
-  const intensity = current !== null ? Math.min(1, Math.abs(current) * 15) : 0; // scale |I| to glow
+function SwitchBody({ closeTime }: { closeTime: number }) {
+  const open = closeTime > 0;
   return (
     <group>
-      {/* Glass envelope */}
+      <Lead from={[-0.9, 0, 0]} to={[-0.22, 0, 0]} />
+      <Lead from={[0.22, 0, 0]} to={[0.9, 0, 0]} />
+      <mesh rotation={[0, 0, open ? -0.45 : 0]}>
+        <boxGeometry args={[0.58, 0.06, 0.06]} />
+        <meshStandardMaterial color={open ? "#dc2626" : "#16a34a"} />
+      </mesh>
+      <mesh position={[-0.22, 0, 0]}>
+        <sphereGeometry args={[0.07, 12, 12]} />
+        <meshStandardMaterial color="#0f172a" />
+      </mesh>
+      <mesh position={[0.22, 0, 0]}>
+        <sphereGeometry args={[0.07, 12, 12]} />
+        <meshStandardMaterial color="#0f172a" />
+      </mesh>
+    </group>
+  );
+}
+
+function BulbBody({ componentId }: { componentId: string }) {
+  const current = useSimStore((state) => state.getBranchCurrent(componentId));
+  const glow = Math.min(1, Math.abs(current ?? 0) * 12);
+  return (
+    <group>
       <mesh>
-        <sphereGeometry args={[0.4, 24, 24]} />
-        <meshStandardMaterial
-          color="#f0f0e8"
-          transparent
-          opacity={0.75}
-          roughness={0.1}
-          metalness={0}
-        />
+        <sphereGeometry args={[0.38, 24, 24]} />
+        <meshStandardMaterial color="#fef3c7" emissive="#f59e0b" emissiveIntensity={glow} transparent opacity={0.8} />
       </mesh>
-      {/* Filament (coil inside) */}
-      <mesh position={[0, 0, 0]}>
-        <cylinderGeometry args={[0.08, 0.08, 0.5, 8]} />
-        <meshStandardMaterial
-          color="#ffcc66"
-          emissive="#ffaa22"
-          emissiveIntensity={intensity}
-          roughness={0.8}
-        />
-      </mesh>
-      {/* Base / cap */}
-      <mesh position={[0, -0.38, 0]}>
-        <cylinderGeometry args={[0.32, 0.35, 0.12, 16]} />
-        <meshStandardMaterial color="#2a2a2a" roughness={0.8} />
+      <mesh position={[0, -0.42, 0]}>
+        <cylinderGeometry args={[0.2, 0.26, 0.18, 18]} />
+        <meshStandardMaterial color="#475569" />
       </mesh>
       <Lead from={[-0.9, 0, 0]} to={[-0.35, 0, 0]} />
       <Lead from={[0.35, 0, 0]} to={[0.9, 0, 0]} />
@@ -179,47 +134,34 @@ function BulbBody({ value, componentId }: { value: number; componentId: string }
 function GroundBody() {
   return (
     <group>
-      {[0, 1, 2].map((i) => {
-        const w = 0.6 - i * 0.16;
-        return (
-          <mesh key={i} position={[0, -i * 0.18, 0]}>
-            <boxGeometry args={[w, 0.05, 0.05]} />
-            <meshStandardMaterial color="#00ff9d" emissive="#00ff9d" emissiveIntensity={0.5} />
-          </mesh>
-        );
-      })}
+      {[0.6, 0.42, 0.24].map((width, index) => (
+        <mesh key={width} position={[0, -index * 0.18, 0]}>
+          <boxGeometry args={[width, 0.05, 0.05]} />
+          <meshStandardMaterial color="#0f766e" />
+        </mesh>
+      ))}
       <Lead from={[0, 0.9, 0]} to={[0, 0.1, 0]} />
     </group>
   );
 }
 
-// ─── Selection ring ───────────────────────────────────────────────────────────
-
 function SelectionRing() {
   return (
     <mesh rotation={[Math.PI / 2, 0, 0]}>
-      <torusGeometry args={[0.7, 0.025, 8, 32]} />
-      <meshStandardMaterial color="#00ff9d" emissive="#00ff9d" emissiveIntensity={1} transparent opacity={0.8} />
+      <torusGeometry args={[0.78, 0.03, 8, 36]} />
+      <meshStandardMaterial color="#10b981" emissive="#10b981" emissiveIntensity={0.5} />
     </mesh>
   );
 }
 
-// ─── Pin indicator ────────────────────────────────────────────────────────────
-
-export function PinIndicator({ position, active }: { position: [number,number,number]; active: boolean }) {
+function PinIndicator({ position }: { position: [number, number, number] }) {
   return (
     <mesh position={position}>
-      <sphereGeometry args={[0.1, 8, 8]} />
-      <meshStandardMaterial
-        color={active ? "#00ff9d" : "#555"}
-        emissive={active ? "#00ff9d" : "#000"}
-        emissiveIntensity={active ? 0.8 : 0}
-      />
+      <sphereGeometry args={[0.1, 12, 12]} />
+      <meshStandardMaterial color="#0ea5e9" emissive="#38bdf8" emissiveIntensity={0.35} />
     </mesh>
   );
 }
-
-// ─── Main component ───────────────────────────────────────────────────────────
 
 interface Props {
   component: Component;
@@ -230,71 +172,63 @@ interface Props {
 }
 
 export function ComponentMesh({ component, selected, onClick, onPinClick, showPins }: Props) {
-  const { position, rotation, type, value, label } = component;
-  const getNodeVoltage = useSimStore((s) => s.getNodeVoltage);
-
+  const { position, rotation, type, label } = component;
+  const componentPower = useSimStore((state) => state.getComponentPower(component.id));
   const rotY = rotation === 1 ? Math.PI / 2 : 0;
-
-  // Pin world positions (in local space, then rotated)
-  const pin0Local: [number,number,number] = [-0.9, 0, 0];
-  const pin1Local: [number,number,number] = [0.9, 0, 0];
+  const pin0Local: [number, number, number] = [-0.9, 0, 0];
+  const pin1Local: [number, number, number] = [0.9, 0, 0];
 
   return (
     <group
       position={[position.x, position.y, position.z]}
       rotation={[0, rotY, 0]}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
     >
-      {/* Body */}
-      {type === "resistor" && <ResistorBody value={value} />}
-      {type === "capacitor" && <CapacitorBody value={value} />}
+      {type === "resistor" && <ResistorBody />}
+      {type === "capacitor" && <CapacitorBody />}
       {type === "inductor" && <InductorBody />}
-      {type === "voltage_source" && <VoltageSourceBody value={value} />}
+      {type === "voltage_source" && <VoltageSourceBody />}
       {type === "current_source" && <CurrentSourceBody />}
-      {type === "bulb" && <BulbBody value={value} componentId={component.id} />}
+      {type === "switch" && <SwitchBody closeTime={component.value} />}
+      {type === "bulb" && <BulbBody componentId={component.id} />}
       {type === "ground" && <GroundBody />}
 
-      {/* Selection ring */}
       {selected && <SelectionRing />}
 
-      {/* Pin indicators */}
       {showPins && type !== "ground" && (
         <>
-          <PinIndicator position={pin0Local} active={showPins} />
-          <PinIndicator position={pin1Local} active={showPins} />
-          <mesh
-            position={pin0Local}
-            onClick={(e) => { e.stopPropagation(); onPinClick(0); }}
-          >
-            <sphereGeometry args={[0.18, 8, 8]} />
+          <PinIndicator position={pin0Local} />
+          <PinIndicator position={pin1Local} />
+          <mesh position={pin0Local} onClick={(event) => { event.stopPropagation(); onPinClick(0); }}>
+            <sphereGeometry args={[0.2, 12, 12]} />
             <meshStandardMaterial transparent opacity={0} />
           </mesh>
-          <mesh
-            position={pin1Local}
-            onClick={(e) => { e.stopPropagation(); onPinClick(1); }}
-          >
-            <sphereGeometry args={[0.18, 8, 8]} />
-            <meshStandardMaterial transparent opacity={0} />
-          </mesh>
-        </>
-      )}
-      {showPins && type === "ground" && (
-        <>
-          <PinIndicator position={[0, 0.9, 0]} active={showPins} />
-          <mesh
-            position={[0, 0.9, 0]}
-            onClick={(e) => { e.stopPropagation(); onPinClick(0); }}
-          >
-            <sphereGeometry args={[0.18, 8, 8]} />
+          <mesh position={pin1Local} onClick={(event) => { event.stopPropagation(); onPinClick(1); }}>
+            <sphereGeometry args={[0.2, 12, 12]} />
             <meshStandardMaterial transparent opacity={0} />
           </mesh>
         </>
       )}
 
-      {/* Label */}
+      {showPins && type === "ground" && (
+        <>
+          <PinIndicator position={[0, 0.9, 0]} />
+          <mesh position={[0, 0.9, 0]} onClick={(event) => { event.stopPropagation(); onPinClick(0); }}>
+            <sphereGeometry args={[0.2, 12, 12]} />
+            <meshStandardMaterial transparent opacity={0} />
+          </mesh>
+        </>
+      )}
+
       {label && (
-        <Html position={[0, 0.7, 0]} center style={{ fontSize: 9, color: "#aaa", pointerEvents: "none", whiteSpace: "nowrap" }}>
-          {label}
+        <Html position={[0, 0.9, 0]} center style={{ pointerEvents: "none", whiteSpace: "nowrap" }}>
+          <div className="rounded-full border border-slate-200 bg-white/90 px-2 py-1 text-[10px] font-medium text-slate-700 shadow-sm">
+            {label}
+            {componentPower !== null ? ` · ${formatPowerLabel(componentPower)}` : ""}
+          </div>
         </Html>
       )}
     </group>

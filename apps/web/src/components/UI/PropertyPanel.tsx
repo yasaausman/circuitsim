@@ -1,122 +1,156 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { buildNetlist } from "@circuitsim/engine";
 import { useCircuitStore } from "../../store/circuit";
 import { useSimStore } from "../../store/simulation";
-import { buildNetlist } from "@circuitsim/engine";
 
 const UNITS: Record<string, string> = {
-  resistor: "Ω",
+  resistor: "ohms",
   capacitor: "F",
   inductor: "H",
   voltage_source: "V",
   current_source: "A",
-  bulb: "Ω",
+  switch: "s",
+  bulb: "ohms",
   ground: "",
 };
 
+function formatPower(value: number | null) {
+  if (value === null) return null;
+  if (Math.abs(value) < 1e-3) return `${(value * 1e6).toFixed(2)} uW`;
+  if (Math.abs(value) < 1) return `${(value * 1e3).toFixed(2)} mW`;
+  return `${value.toFixed(3)} W`;
+}
+
 export function PropertyPanel() {
   const { circuit, selectedId, updateComponent } = useCircuitStore();
-  const { result, currentFrame, getNodeVoltage, getBranchCurrent } = useSimStore();
+  const { getNodeVoltage, getBranchCurrent, getComponentPower } = useSimStore();
 
-  const comp = circuit.components.find((c) => c.id === selectedId);
+  const component = circuit.components.find((item) => item.id === selectedId);
   const [editValue, setEditValue] = useState("");
+  const [editLabel, setEditLabel] = useState("");
 
   useEffect(() => {
-    if (comp) setEditValue(String(comp.value));
-  }, [comp?.id, comp?.value]);
+    if (!component) return;
+    setEditValue(String(component.value));
+    setEditLabel(component.label ?? "");
+  }, [component?.id, component?.value, component?.label]);
 
-  if (!comp) {
+  if (!component) {
     return (
-      <div className="p-3">
-        <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Properties</p>
-        <p className="text-xs text-gray-600">Select a component</p>
+      <div className="p-4">
+        <p className="mb-2 text-[10px] uppercase tracking-[0.25em] text-slate-500">Properties</p>
+        <p className="text-sm text-slate-500">Select a component to inspect its values, currents, and power.</p>
       </div>
     );
   }
 
-  // Get simulation results for this component
-  const current = getBranchCurrent(comp.id);
+  const selectedComponent = component;
+
   const netlist = buildNetlist(circuit.components, circuit.wires);
-  const node0 = netlist.terminalToNode.get(`${comp.id}:0`) ?? null;
-  const node1 = netlist.terminalToNode.get(`${comp.id}:1`) ?? null;
+  const node0 = netlist.terminalToNode.get(`${selectedComponent.id}:0`) ?? null;
+  const node1 = netlist.terminalToNode.get(`${selectedComponent.id}:1`) ?? null;
   const v0 = node0 ? getNodeVoltage(node0) : null;
   const v1 = node1 ? getNodeVoltage(node1) : null;
-  const vDiff = v0 !== null && v1 !== null ? v0 - v1 : null;
+  const voltageDrop = v0 !== null && v1 !== null ? v0 - v1 : null;
+  const current = getBranchCurrent(selectedComponent.id);
+  const power = getComponentPower(selectedComponent.id);
 
   function commitValue() {
-    const n = parseFloat(editValue);
-    if (!isNaN(n) && n >= 0) updateComponent(comp!.id, { value: n });
+    const numeric = parseFloat(editValue);
+    if (!Number.isNaN(numeric) && numeric >= 0) {
+      updateComponent(selectedComponent.id, { value: numeric });
+    }
   }
 
-  const toggleRotation = () =>
-    updateComponent(comp.id, { rotation: comp.rotation === 0 ? 1 : 0 });
+  function commitLabel() {
+    updateComponent(selectedComponent.id, { label: editLabel });
+  }
 
   return (
-    <div className="p-3 flex flex-col gap-3">
-      <p className="text-[10px] text-gray-500 uppercase tracking-widest">Properties</p>
+    <div className="flex flex-col gap-4 p-4">
+      <p className="text-[10px] uppercase tracking-[0.25em] text-slate-500">Properties</p>
 
-      <div className="flex flex-col gap-1 text-xs">
-        <div className="flex justify-between">
-          <span className="text-gray-400">Type</span>
-          <span className="text-gray-200 capitalize">{comp.type.replace("_", " ")}</span>
+      <div className="rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-slate-500">Type</span>
+          <span className="capitalize text-slate-700">{selectedComponent.type.replace("_", " ")}</span>
         </div>
-        <div className="flex justify-between">
-          <span className="text-gray-400">ID</span>
-          <span className="text-gray-500 truncate max-w-[100px]">{comp.id}</span>
+        <div className="mt-2 flex items-center justify-between text-sm">
+          <span className="text-slate-500">ID</span>
+          <span className="max-w-[120px] truncate font-mono text-xs text-slate-500">{selectedComponent.id}</span>
         </div>
       </div>
 
-      {/* Value editor */}
-      {comp.type !== "ground" && (
-        <label className="flex flex-col gap-1 text-xs">
-          <span className="text-gray-400">Value ({UNITS[comp.type]})</span>
-          <div className="flex gap-1">
-            <input
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onBlur={commitValue}
-              onKeyDown={(e) => e.key === "Enter" && commitValue()}
-              className="flex-1 bg-surface-raised border border-surface-border rounded px-2 py-1 text-gray-200 focus:outline-none focus:border-accent-blue"
-            />
-          </div>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-slate-500">Label</span>
+        <input
+          value={editLabel}
+          onChange={(event) => setEditLabel(event.target.value)}
+          onBlur={commitLabel}
+          onKeyDown={(event) => event.key === "Enter" && commitLabel()}
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-emerald-400"
+        />
+      </label>
+
+      {selectedComponent.type !== "ground" && (
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-slate-500">
+            {selectedComponent.type === "switch"
+              ? "Close time (s)"
+              : `Value (${UNITS[selectedComponent.type]})`}
+          </span>
+          <input
+            value={editValue}
+            onChange={(event) => setEditValue(event.target.value)}
+            onBlur={commitValue}
+            onKeyDown={(event) => event.key === "Enter" && commitValue()}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-sky-400"
+          />
         </label>
       )}
 
-      {/* Rotation */}
-      {comp.type !== "ground" && (
+      {selectedComponent.type !== "ground" && (
         <button
-          onClick={toggleRotation}
-          className="text-xs py-1 rounded border border-surface-border text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-all"
+          onClick={() =>
+            updateComponent(selectedComponent.id, { rotation: selectedComponent.rotation === 0 ? 1 : 0 })
+          }
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
         >
-          Rotate 90°  ({comp.rotation === 0 ? "Horizontal" : "Vertical"})
+          Rotate 90 degrees ({selectedComponent.rotation === 0 ? "Horizontal" : "Vertical"})
         </button>
       )}
 
-      {/* Simulation results */}
-      {(current !== null || vDiff !== null) && (
-        <div className="flex flex-col gap-1 pt-2 border-t border-surface-border">
-          <p className="text-[10px] text-gray-500 uppercase tracking-widest">Probe</p>
-          {vDiff !== null && (
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-400">V (pin0→pin1)</span>
-              <span className="text-accent-amber font-mono">{vDiff.toFixed(4)} V</span>
+      {(current !== null || voltageDrop !== null || power !== null) && (
+        <div className="rounded-2xl border border-amber-100 bg-amber-50/90 p-3">
+          <p className="mb-2 text-[10px] uppercase tracking-[0.25em] text-amber-700">Measurement</p>
+          {voltageDrop !== null && (
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">Voltage drop</span>
+              <span className="font-mono text-amber-700">{voltageDrop.toFixed(4)} V</span>
             </div>
           )}
           {current !== null && (
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-400">Current</span>
-              <span className="text-accent-blue font-mono">{current.toExponential(3)} A</span>
+            <div className="mt-1 flex justify-between text-sm">
+              <span className="text-slate-500">Current</span>
+              <span className="font-mono text-sky-700">{current.toExponential(3)} A</span>
+            </div>
+          )}
+          {power !== null && (
+            <div className="mt-1 flex justify-between text-sm">
+              <span className="text-slate-500">Power</span>
+              <span className="font-mono text-rose-700">{formatPower(power)}</span>
             </div>
           )}
           {v0 !== null && (
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-400">V(pin0)</span>
-              <span className="text-gray-300 font-mono">{v0.toFixed(4)} V</span>
+            <div className="mt-1 flex justify-between text-sm">
+              <span className="text-slate-500">Pin 0</span>
+              <span className="font-mono text-slate-700">{v0.toFixed(4)} V</span>
             </div>
           )}
           {v1 !== null && (
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-400">V(pin1)</span>
-              <span className="text-gray-300 font-mono">{v1.toFixed(4)} V</span>
+            <div className="mt-1 flex justify-between text-sm">
+              <span className="text-slate-500">Pin 1</span>
+              <span className="font-mono text-slate-700">{v1.toFixed(4)} V</span>
             </div>
           )}
         </div>

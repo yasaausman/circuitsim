@@ -1,11 +1,10 @@
-// ─── Component types ──────────────────────────────────────────────────────────
-
 export type ComponentType =
   | "resistor"
   | "capacitor"
   | "inductor"
   | "voltage_source"
   | "current_source"
+  | "switch"
   | "ground"
   | "bulb";
 
@@ -15,19 +14,13 @@ export interface Vec3 {
   z: number;
 }
 
-/**
- * A two-terminal (or one-terminal for ground) circuit component.
- * Pin 0 is the positive/anode terminal; pin 1 is the negative/cathode.
- * Ground has only pin 0.
- */
 export interface Component {
   id: string;
   type: ComponentType;
-  /** Value in SI units: Ω, F, H, V, A; for bulb: filament resistance in Ω */
   value: number;
   label?: string;
   position: Vec3;
-  /** 0 = horizontal (pin0 at -x), 1 = vertical (pin0 at -z) */
+  /** 0 = horizontal, 1 = vertical */
   rotation: 0 | 1;
 }
 
@@ -46,29 +39,58 @@ export interface Circuit {
   wires: Wire[];
 }
 
-// ─── Simulation options ───────────────────────────────────────────────────────
-
 export interface DCOptions {
   type: "dc";
 }
 
+export interface ACOptions {
+  type: "ac";
+  frequency: number;
+}
+
 export interface TransientOptions {
   type: "transient";
-  /** Time step in seconds (default: 1e-4) */
   stepSize: number;
-  /** Stop time in seconds (default: 1e-2) */
   stopTime: number;
 }
 
-export type SimOptions = DCOptions | TransientOptions;
+export type SimOptions = DCOptions | ACOptions | TransientOptions;
 
-// ─── Simulation results ───────────────────────────────────────────────────────
+export type WarningSeverity = "info" | "warning" | "error";
 
-export interface DCResult {
+export interface AnalysisWarning {
+  id: string;
+  kind:
+    | "missing_ground"
+    | "open_circuit"
+    | "short_circuit"
+    | "floating_component"
+    | "solver"
+    | "analysis";
+  severity: WarningSeverity;
+  title: string;
+  message: string;
+  componentId?: string;
+  nodeId?: string;
+}
+
+export interface BaseSimResult {
+  warnings: AnalysisWarning[];
+  componentPowers: Record<string, number>;
+}
+
+export interface DCResult extends BaseSimResult {
   type: "dc";
-  /** nodeId → voltage (V) */
   nodeVoltages: Record<string, number>;
-  /** componentId → current through component (A), positive = pin0→pin1 */
+  branchCurrents: Record<string, number>;
+  converged: true;
+}
+
+export interface ACResult extends BaseSimResult {
+  type: "ac";
+  frequency: number;
+  /** Magnitude values for the steady-state sinusoidal solution */
+  nodeVoltages: Record<string, number>;
   branchCurrents: Record<string, number>;
   converged: true;
 }
@@ -77,9 +99,10 @@ export interface TransientFrame {
   time: number;
   nodeVoltages: Record<string, number>;
   branchCurrents: Record<string, number>;
+  componentPowers: Record<string, number>;
 }
 
-export interface TransientResult {
+export interface TransientResult extends BaseSimResult {
   type: "transient";
   frames: TransientFrame[];
   converged: true;
@@ -88,15 +111,13 @@ export interface TransientResult {
 export interface SimError {
   converged: false;
   message: string;
+  warnings?: AnalysisWarning[];
 }
 
-export type SimResult = DCResult | TransientResult | SimError;
-
-// ─── Probe ────────────────────────────────────────────────────────────────────
+export type SimResult = DCResult | ACResult | TransientResult | SimError;
 
 export interface ProbeResult {
   nodeId: string;
   voltage: number;
-  /** Current from the wire's from-component into this node (A) */
   current?: number;
 }

@@ -1,76 +1,144 @@
-/**
- * Top-level simulation entry point.
- * Accepts a Circuit + SimOptions, returns a SimResult.
- */
-
-import type { Circuit, SimOptions, SimResult, DCResult, TransientResult } from "../types.js";
+import type {
+  ACResult,
+  Circuit,
+  DCResult,
+  SimResult,
+  TransientResult,
+} from "../types.js";
 import { buildNetlist, nodeOfPin } from "../graph.js";
+import { computeComponentPowers, diagnoseCircuit } from "../analysis.js";
 import {
-  solveMNA,
   emptyTransientState,
+  magnitude,
+  solveACMNA,
+  solveMNA,
   type TransientState,
 } from "./mna.js";
 
-export function simulate(circuit: Circuit, opts: SimOptions): SimResult {
+function solverError(message: string, circuit: Circuit): SimResult {
+  return {
+    converged: false,
+    message,
+    warnings: [
+      ...diagnoseCircuit(circuit),
+      {
+        id: `solver:${Date.now()}`,
+        kind: "solver",
+        severity: "error",
+        title: "Solver failed",
+        message,
+      },
+    ],
+  };
+}
+
+export function simulate(circuit: Circuit, opts: import("../types.js").SimOptions): SimResult {
   const netlist = buildNetlist(circuit.components, circuit.wires);
+  const warnings = diagnoseCircuit(circuit);
 
   if (opts.type === "dc") {
-    const sol = solveMNA(circuit, netlist, null);
-    if (!sol) return { converged: false, message: "Singular matrix – check for floating nodes or short circuits." };
+    const solution = solveMNA(circuit, netlist, null);
+    if (!solution) {
+      return solverError("Singular matrix; check for floating nodes, missing ground, or short circuits.", circuit);
+    }
 
     const nodeVoltages: DCResult["nodeVoltages"] = {};
-    for (const [k, v] of sol.nodeVoltages) nodeVoltages[k] = v;
+    for (const [nodeId, voltage] of solution.nodeVoltages) nodeVoltages[nodeId] = voltage;
 
     const branchCurrents: DCResult["branchCurrents"] = {};
-    for (const [k, v] of sol.branchCurrents) branchCurrents[k] = v;
+    for (const [componentId, current] of solution.branchCurrents) branchCurrents[componentId] = current;
 
-    return { type: "dc", nodeVoltages, branchCurrents, converged: true };
+    return {
+      type: "dc",
+      nodeVoltages,
+      branchCurrents,
+      componentPowers: computeComponentPowers(circuit, nodeVoltages, branchCurrents, null),
+      warnings,
+      converged: true,
+    };
   }
 
-  // ── Transient ─────────────────────────────────────────────────────────────
-  const { stepSize: h = 1e-4, stopTime = 1e-2 } = opts;
-  const maxSteps = Math.ceil(stopTime / h);
+  if (opts.type === "ac") {
+    const solution = solveACMNA(circuit, netlist, opts.frequency);
+    if (!solution) {
+      return solverError(`AC solve failed at ${opts.frequency} Hz.`, circuit);
+    }
 
+    const nodeVoltages: ACResult["nodeVoltages"] = {};
+    for (const [nodeId, voltage] of solution.nodeVoltages) {
+      nodeVoltages[nodeId] = magnitude(voltage);
+    }
+
+    const branchCurrents: ACResult["branchCurrents"] = {};
+    for (const [componentId, current] of solution.branchCurrents) {
+      branchCurrents[componentId] = magnitude(current);
+    }
+
+    return {
+      type: "ac",
+      frequency: opts.frequency,
+      nodeVoltages,
+      branchCurrents,
+      componentPowers: computeComponentPowers(circuit, nodeVoltages, branchCurrents, null),
+      warnings,
+      converged: true,
+    };
+  }
+
+  const stepSize = opts.stepSize || 1e-4;
+  const stopTime = opts.stopTime || 1e-2;
+  const maxSteps = Math.ceil(stopTime / stepSize);
   const state: TransientState = emptyTransientState();
 
-  // Initialise state from DC operating point
-  const dcSol = solveMNA(circuit, netlist, null);
-  if (dcSol) {
-    for (const c of circuit.components) {
-      const nP = nodeOfPin(netlist, c.id, 0);
-      const nN = nodeOfPin(netlist, c.id, 1);
-      const vP = nP ? (dcSol.nodeVoltages.get(nP) ?? 0) : 0;
-      const vN = nN ? (dcSol.nodeVoltages.get(nN) ?? 0) : 0;
-      state.voltages.set(c.id, vP - vN);
-      state.currents.set(c.id, dcSol.branchCurrents.get(c.id) ?? 0);
+  const dcSolution = solveMNA(circuit, netlist, null);
+  if (dcSolution) {
+    for (const component of circuit.components) {
+      const nP = nodeOfPin(netlist, component.id, 0);
+      const nN = nodeOfPin(netlist, component.id, 1);
+      const vP = nP ? (dcSolution.nodeVoltages.get(nP) ?? 0) : 0;
+      const vN = nN ? (dcSolution.nodeVoltages.get(nN) ?? 0) : 0;
+      state.voltages.set(component.id, vP - vN);
+      state.currents.set(component.id, dcSolution.branchCurrents.get(component.id) ?? 0);
     }
   }
 
   const frames: TransientResult["frames"] = [];
-
-  for (let step = 0; step <= maxSteps; step++) {
-    const time = step * h;
-    const sol = solveMNA(circuit, netlist, { state, h });
-    if (!sol) return { converged: false, message: `Singular matrix at t=${time.toExponential(3)}s` };
+  for (let step = 0; step <= maxSteps; step += 1) {
+    const time = step * stepSize;
+    const solution = solveMNA(circuit, netlist, { state, h: stepSize, time });
+    if (!solution) {
+      return solverError(`Transient solve failed at t=${time.toExponential(3)}s.`, circuit);
+    }
 
     const nodeVoltages: Record<string, number> = {};
-    for (const [k, v] of sol.nodeVoltages) nodeVoltages[k] = v;
+    for (const [nodeId, voltage] of solution.nodeVoltages) nodeVoltages[nodeId] = voltage;
 
     const branchCurrents: Record<string, number> = {};
-    for (const [k, v] of sol.branchCurrents) branchCurrents[k] = v;
+    for (const [componentId, current] of solution.branchCurrents) branchCurrents[componentId] = current;
 
-    frames.push({ time, nodeVoltages, branchCurrents });
+    frames.push({
+      time,
+      nodeVoltages,
+      branchCurrents,
+      componentPowers: computeComponentPowers(circuit, nodeVoltages, branchCurrents, time),
+    });
 
-    // Update state for next step (trapezoidal predictor)
-    for (const c of circuit.components) {
-      const nP = nodeOfPin(netlist, c.id, 0);
-      const nN = nodeOfPin(netlist, c.id, 1);
-      const vP = nP ? (sol.nodeVoltages.get(nP) ?? 0) : 0;
-      const vN = nN ? (sol.nodeVoltages.get(nN) ?? 0) : 0;
-      state.voltages.set(c.id, vP - vN);
-      state.currents.set(c.id, sol.branchCurrents.get(c.id) ?? 0);
+    for (const component of circuit.components) {
+      const nP = nodeOfPin(netlist, component.id, 0);
+      const nN = nodeOfPin(netlist, component.id, 1);
+      const vP = nP ? (solution.nodeVoltages.get(nP) ?? 0) : 0;
+      const vN = nN ? (solution.nodeVoltages.get(nN) ?? 0) : 0;
+      state.voltages.set(component.id, vP - vN);
+      state.currents.set(component.id, solution.branchCurrents.get(component.id) ?? 0);
     }
   }
 
-  return { type: "transient", frames, converged: true };
+  const componentPowers = frames[frames.length - 1]?.componentPowers ?? {};
+  return {
+    type: "transient",
+    frames,
+    componentPowers,
+    warnings,
+    converged: true,
+  };
 }

@@ -1,12 +1,13 @@
-/**
- * Simulation results & state.
- * Separate from circuit store so re-renders stay scoped.
- */
-
 import { create } from "zustand";
-import type { SimResult, DCResult, TransientResult } from "@circuitsim/engine";
 import { simulate } from "@circuitsim/engine";
-import type { Circuit, SimOptions } from "@circuitsim/engine";
+import type {
+  ACResult,
+  Circuit,
+  DCResult,
+  SimOptions,
+  SimResult,
+  TransientResult,
+} from "@circuitsim/engine";
 
 export type SimStatus = "idle" | "running" | "done" | "error";
 
@@ -14,16 +15,26 @@ interface SimStore {
   status: SimStatus;
   result: SimResult | null;
   error: string | null;
-  /** For transient: which frame is currently displayed */
   currentFrame: number;
+  autoplay: boolean;
 
-  run: (circuit: Circuit, opts: SimOptions) => void;
-  setFrame: (f: number) => void;
+  run: (circuit: Circuit, options: SimOptions) => void;
+  setFrame: (frame: number) => void;
+  setAutoplay: (value: boolean) => void;
   reset: () => void;
 
-  // Derived helpers
   getNodeVoltage: (nodeId: string) => number | null;
   getBranchCurrent: (componentId: string) => number | null;
+  getComponentPower: (componentId: string) => number | null;
+}
+
+function getActiveResult(result: SimResult | null, currentFrame: number) {
+  if (!result?.converged) return null;
+  if (result.type === "transient") {
+    const transient = result as TransientResult;
+    return transient.frames[currentFrame] ?? transient.frames[0] ?? null;
+  }
+  return result as DCResult | ACResult;
 }
 
 export const useSimStore = create<SimStore>()((set, get) => ({
@@ -31,40 +42,77 @@ export const useSimStore = create<SimStore>()((set, get) => ({
   result: null,
   error: null,
   currentFrame: 0,
+  autoplay: false,
 
-  run(circuit, opts) {
-    set({ status: "running", error: null });
-    // Run in a microtask so UI can update first
+  run(circuit, options) {
+    set({ status: "running", error: null, autoplay: false });
     setTimeout(() => {
       try {
-        const result = simulate(circuit, opts);
+        const result = simulate(circuit, options);
         if (!result.converged) {
-          set({ status: "error", error: result.message, result: null });
+          set({
+            status: "error",
+            error: result.message,
+            result,
+            currentFrame: 0,
+          });
         } else {
-          set({ status: "done", result, currentFrame: 0 });
+          set({
+            status: "done",
+            result,
+            error: null,
+            currentFrame: 0,
+            autoplay: false,
+          });
         }
-      } catch (e) {
-        set({ status: "error", error: String(e), result: null });
+      } catch (error) {
+        set({
+          status: "error",
+          error: String(error),
+          result: null,
+          currentFrame: 0,
+          autoplay: false,
+        });
       }
     }, 0);
   },
 
-  setFrame(f) { set({ currentFrame: f }); },
-  reset() { set({ status: "idle", result: null, error: null, currentFrame: 0 }); },
+  setFrame(frame) {
+    set({ currentFrame: frame });
+  },
+
+  setAutoplay(value) {
+    set({ autoplay: value });
+  },
+
+  reset() {
+    set({
+      status: "idle",
+      result: null,
+      error: null,
+      currentFrame: 0,
+      autoplay: false,
+    });
+  },
 
   getNodeVoltage(nodeId) {
-    const { result, currentFrame } = get();
-    if (!result?.converged) return null;
-    if (result.type === "dc") return (result as DCResult).nodeVoltages[nodeId] ?? null;
-    const r = result as TransientResult;
-    return r.frames[currentFrame]?.nodeVoltages[nodeId] ?? null;
+    const active = getActiveResult(get().result, get().currentFrame);
+    if (!active) return null;
+    return active.nodeVoltages[nodeId] ?? null;
   },
 
   getBranchCurrent(componentId) {
+    const active = getActiveResult(get().result, get().currentFrame);
+    if (!active) return null;
+    return active.branchCurrents[componentId] ?? null;
+  },
+
+  getComponentPower(componentId) {
     const { result, currentFrame } = get();
     if (!result?.converged) return null;
-    if (result.type === "dc") return (result as DCResult).branchCurrents[componentId] ?? null;
-    const r = result as TransientResult;
-    return r.frames[currentFrame]?.branchCurrents[componentId] ?? null;
+    if (result.type === "transient") {
+      return result.frames[currentFrame]?.componentPowers[componentId] ?? null;
+    }
+    return result.componentPowers[componentId] ?? null;
   },
 }));

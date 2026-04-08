@@ -36,7 +36,7 @@ const CIRCUIT_TOOLS: FunctionDeclaration[] = [
       properties: {
         type: {
           type: SchemaType.STRING,
-          enum: ["resistor", "capacitor", "inductor", "voltage_source", "current_source", "bulb", "ground"],
+          enum: ["resistor", "capacitor", "inductor", "voltage_source", "current_source", "switch", "bulb", "ground"],
           description: "Component type",
         },
         value: { type: SchemaType.NUMBER, description: "SI value: Ω, F, H, V, or A" },
@@ -118,7 +118,8 @@ const CIRCUIT_TOOLS: FunctionDeclaration[] = [
     parameters: {
       type: SchemaType.OBJECT,
       properties: {
-        type: { type: SchemaType.STRING, enum: ["dc", "transient"] },
+        type: { type: SchemaType.STRING, enum: ["dc", "ac", "transient"] },
+        frequency: { type: SchemaType.NUMBER, description: "AC frequency in Hz" },
         stopTime: { type: SchemaType.NUMBER, description: "Transient stop time (s)" },
         stepSize: { type: SchemaType.NUMBER, description: "Transient step size (s)" },
       },
@@ -149,6 +150,10 @@ When building circuits:
 3. Always include at least one ground component
 4. Run simulation to verify
 5. If a tool fails, call get_circuit and then repair using update_component / reconnect
+
+For explain/fix requests:
+- Explain in plain English first, not just raw numbers
+- If the user asks to fix the circuit, inspect it, correct it with tools, then summarize the changes
 
 Respond concisely. When calling tools, explain briefly what you're doing.`;
 

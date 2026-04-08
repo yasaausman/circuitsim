@@ -1,40 +1,45 @@
-import { useCircuitStore } from "../../store/circuit";
 import type { ComponentType } from "@circuitsim/engine";
+import { useCircuitStore } from "../../store/circuit";
 
-const COMPONENTS: { type: ComponentType; label: string; symbol: string; unit: string }[] = [
-  { type: "resistor",       label: "Resistor",        symbol: "R",  unit: "Ω" },
-  { type: "capacitor",      label: "Capacitor",       symbol: "C",  unit: "F" },
-  { type: "inductor",       label: "Inductor",        symbol: "L",  unit: "H" },
-  { type: "voltage_source", label: "Voltage Source",  symbol: "V",  unit: "V" },
-  { type: "current_source", label: "Current Source",  symbol: "I",  unit: "A" },
-  { type: "bulb",           label: "Bulb",            symbol: "💡", unit: "Ω" },
-  { type: "ground",         label: "Ground",          symbol: "⏚", unit: "" },
+const COMPONENTS: Array<{ type: ComponentType; label: string; symbol: string; hint: string }> = [
+  { type: "resistor", label: "Resistor", symbol: "R", hint: "Limits current" },
+  { type: "capacitor", label: "Capacitor", symbol: "C", hint: "Stores charge" },
+  { type: "inductor", label: "Inductor", symbol: "L", hint: "Stores magnetic energy" },
+  { type: "voltage_source", label: "Voltage Source", symbol: "V", hint: "Supplies voltage" },
+  { type: "current_source", label: "Current Source", symbol: "I", hint: "Supplies current" },
+  { type: "switch", label: "Switch", symbol: "S", hint: "Closes at a chosen time" },
+  { type: "bulb", label: "Bulb", symbol: "B", hint: "Visual load" },
+  { type: "ground", label: "Ground", symbol: "G", hint: "Reference node" },
 ];
 
 export function ComponentPalette() {
-  const { tool, setTool } = useCircuitStore();
+  const tool = useCircuitStore((state) => state.tool);
+  const setTool = useCircuitStore((state) => state.setTool);
 
   return (
-    <div className="flex flex-col gap-1 p-2">
-      <p className="text-[10px] text-gray-500 uppercase tracking-widest px-1 mb-1">Components</p>
-      {COMPONENTS.map(({ type, label, symbol }) => {
+    <div className="flex flex-col gap-2 p-3">
+      <p className="px-1 text-[10px] uppercase tracking-[0.25em] text-slate-500">Components</p>
+      {COMPONENTS.map(({ type, label, symbol, hint }) => {
         const active = tool.type === "place" && tool.componentType === type;
         return (
           <button
             key={type}
-            onClick={() =>
-              setTool(active ? { type: "select" } : { type: "place", componentType: type })
-            }
-            className={`
-              flex items-center gap-2 px-3 py-2 rounded text-left text-sm transition-all
-              ${active
-                ? "bg-accent-green/20 text-accent-green border border-accent-green/40"
-                : "text-gray-300 hover:bg-surface-raised border border-transparent hover:border-surface-border"
-              }
-            `}
+            onClick={() => setTool(active ? { type: "select" } : { type: "place", componentType: type })}
+            className={`rounded-2xl border px-3 py-3 text-left transition ${
+              active
+                ? "border-emerald-300 bg-emerald-50 text-emerald-700 shadow-sm"
+                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+            }`}
           >
-            <span className="w-5 text-center font-bold text-base">{symbol}</span>
-            <span className="text-xs">{label}</span>
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-sm font-semibold text-slate-700">
+                {symbol}
+              </div>
+              <div>
+                <p className="text-sm font-medium">{label}</p>
+                <p className="text-xs text-slate-500">{hint}</p>
+              </div>
+            </div>
           </button>
         );
       })}
