@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm --prefix apps/web run build",
+  "buildCommand": "bun --cwd apps/web run build",
   "outputDirectory": "apps/web/dist",
   "functions": {
     "api/index.ts": {
