@@ -10,6 +10,7 @@
     "typecheck": "npm --prefix packages/engine run typecheck && npm --prefix packages/api run typecheck && npm --prefix apps/web run typecheck"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "esbuild": "^0.21.0"
   }
 }
