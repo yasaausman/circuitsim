@@ -2,6 +2,7 @@
   "name": "circuitsim",
   "version": "0.0.1",
   "private": true,
+  "type": "module",
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {
     "dev": "concurrently -n api,web -c green,cyan --kill-others-on-fail \"npm --prefix packages/api run dev\" \"npm --prefix apps/web run dev\"",
