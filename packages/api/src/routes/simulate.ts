@@ -4,8 +4,8 @@
  */
 
 import { Hono } from "hono";
-import { simulate } from "../../engine/src/index.js";
-import type { Circuit, SimOptions } from "../../engine/src/index.js";
+import { simulate } from "../../../engine/src/index.js";
+import type { Circuit, SimOptions } from "../../../engine/src/index.js";
 
 export const simulateRoutes = new Hono();
 
