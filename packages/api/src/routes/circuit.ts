@@ -5,8 +5,8 @@
  */
 
 import { Hono } from "hono";
-import { simulate } from "@circuitsim/engine";
-import type { Circuit, SimOptions } from "@circuitsim/engine";
+import { simulate } from "../../engine/src/index.js";
+import type { Circuit, SimOptions } from "../../engine/src/index.js";
 
 export const circuitRoutes = new Hono();
 
