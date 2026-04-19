@@ -1,34 +1,8 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export default async function handler(req: any, res: any) {
-  const { default: app } = await import("../packages/api/src/app.js");
+import { handle } from "hono/vercel";
+import app from "../packages/api/src/app.js";
 
-  const protocol = req.headers["x-forwarded-proto"] || "https";
-  const host = req.headers.host || "localhost";
-  const url = `${protocol}://${host}${req.url}`;
+export const config = {
+  runtime: "edge",
+};
 
-  const headers = new Headers();
-  Object.entries(req.headers as Record<string, string | string[]>).forEach(([key, value]) => {
-    if (value) headers.set(key, Array.isArray(value) ? value.join(", ") : value);
-  });
-
-  let body: BodyInit | undefined;
-  if (req.method !== "GET" && req.method !== "HEAD" && req.body) {
-    body = JSON.stringify(req.body);
-    headers.set("content-type", "application/json");
-  }
-
-  const request = new Request(url, {
-    method: req.method || "GET",
-    headers,
-    body,
-  });
-
-  const response = await app.fetch(request);
-
-  res.status(response.status);
-  response.headers.forEach((value: string, key: string) => {
-    res.setHeader(key, value);
-  });
-
-  res.send(await response.text());
-}
+export default handle(app);
