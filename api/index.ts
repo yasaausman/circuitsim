@@ -1,7 +1,7 @@
-import app from "../packages/api/src/app.js";
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default async function handler(req: any, res: any) {
+  const { default: app } = await import("../packages/api/src/app.js");
+
   const protocol = req.headers["x-forwarded-proto"] || "https";
   const host = req.headers.host || "localhost";
   const url = `${protocol}://${host}${req.url}`;
@@ -30,6 +30,5 @@ export default async function handler(req: any, res: any) {
     res.setHeader(key, value);
   });
 
-  const buffer = await response.arrayBuffer();
-  res.send(Buffer.from(buffer));
+  res.send(await response.text());
 }
